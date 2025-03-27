@@ -1,9 +1,7 @@
 from transformers import pipeline
 
-# Load zero-shot classification model
 classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
-# Define function categories
 INTENT_CATEGORIES = {
     "open_application": "Launch a desktop application like Spotify, VLC, or Calculator.",
     "run_command": "Execute a shell command like 'ping google.com' or 'ls -la'.",
