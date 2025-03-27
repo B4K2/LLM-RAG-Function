@@ -1,23 +1,57 @@
-import chromadb
+import os
+from pinecone import Pinecone, ServerlessSpec
 from sentence_transformers import SentenceTransformer
 from function_registry import FUNCTION_METADATA
+from dotenv import load_dotenv
+load_dotenv()  # Load variables from .env
 
-# Initialize vector DB
-chroma_client = chromadb.PersistentClient(path="./chroma_db")
-collection = chroma_client.get_or_create_collection(name="functions")
+
+# Load Pinecone API key from environment variable
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+if not PINECONE_API_KEY:
+    raise ValueError("Pinecone API key not found! Set PINECONE_API_KEY as an environment variable.")
+
+# Initialize Pinecone
+pc = Pinecone(api_key=PINECONE_API_KEY)
+
+# Define index name
+INDEX_NAME = "function-search"
+
+# Create index if it doesn't exist
+if INDEX_NAME not in [index["name"] for index in pc.list_indexes()]:
+    pc.create_index(
+        name=INDEX_NAME,
+        dimension=384,  # SentenceTransformer("all-MiniLM-L6-v2") output dimension
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region="us-east-1")
+    )
+
+# Connect to the created index
+index = pc.Index(INDEX_NAME)
 
 # Load sentence embedding model
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
-# Store function descriptions in vector DB
-for func_name, details in FUNCTION_METADATA.items():
-    embedding = embedder.encode(details["description"]).tolist()
-    collection.add(ids=[func_name], embeddings=[embedding])
-
-def retrieve_best_function(prompt):
-    """Retrieve the best function match dynamically using embeddings."""
+# Store function descriptions in Pinecone
+def store_functions():
+    vectors = []
+    for func_name, details in FUNCTION_METADATA.items():
+        embedding = embedder.encode(details["description"]).tolist()
+        vectors.append({"id": func_name, "values": embedding})
     
-    query_embedding = embedder.encode(prompt).tolist()
-    results = collection.query(query_embeddings=[query_embedding], n_results=1)
+    # Upsert vectors in Pinecone
+    index.upsert(vectors=vectors)
+    print(f"✅ Stored {len(vectors)} function descriptions in Pinecone.")
 
-    return results["ids"][0][0] if results["ids"] else None
+# Retrieve the best function match based on a query
+def retrieve_best_function(prompt):
+    query_embedding = embedder.encode(prompt).tolist()
+    results = index.query(vector=query_embedding, top_k=1, include_metadata=True)
+
+    if results["matches"]:
+        return results["matches"][0]["id"]  # Return the best matching function name
+    return None  # No match found
+
+# Store functions in Pinecone when script runs
+if __name__ == "__main__":
+    store_functions()

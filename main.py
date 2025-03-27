@@ -46,8 +46,7 @@ async def execute_function(query: QueryModel, request: Request):
 
         return {
             "function": function_name,
-            "generated_code": code_snippet,
-            "session_id": session_id
+            "generated_code": code_snippet
         }
 
     return {"error": "No matching function found"}
