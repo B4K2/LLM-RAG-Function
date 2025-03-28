@@ -1,4 +1,6 @@
 env
 chroma_db
-_pycache_
+__pycache__
+session_memory.db
 .env
+.dockerignore

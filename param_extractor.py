@@ -1,15 +1,19 @@
 import re
 import spacy
 
-nlp = spacy.load("en_core_web_sm")
+nlp = None 
+
+def get_nlp():
+    global nlp
+    if nlp is None:
+        nlp = spacy.load("en_core_web_sm")  
+    return nlp
 
 COMMON_APPS = ["spotify", "vlc", "chrome", "firefox", "calculator", "notepad", "discord", "zoom"]
-
 COMMON_WEBSITES = ["google", "youtube", "wikipedia", "twitter", "facebook", "github", "amazon"]
 
-def extract_parameters(prompt, function_name):
-    
-    doc = nlp(prompt)
+def extract_parameters(prompt, function_name, chat_history=None):
+    doc = get_nlp()(prompt)
     extracted_param = None
 
     if function_name == "open_application":
@@ -27,11 +31,19 @@ def extract_parameters(prompt, function_name):
                 extracted_param = match.group(2).lower()
 
     elif function_name == "get_system_info":
-        match = re.search(r'(cpu|ram|disk|memory|gpu)', prompt, re.IGNORECASE)
-        extracted_param = match.group(1) if match else "cpu"
+        components = re.findall(r'(cpu|ram|disk|memory|gpu)', prompt, re.IGNORECASE)
+
+        if not components and chat_history and len(chat_history) > 0:
+            last_entry = chat_history[-1]
+            last_param = last_entry["params"][0] if last_entry["params"] else "cpu"
+
+            if "other" in prompt.lower() or "components" in prompt.lower():
+                components = ["ram", "disk"] if last_param == "cpu" else ["cpu", "disk"]
+
+        extracted_param = components if components else ["cpu"]
 
     elif function_name == "run_command":
-        extracted_param = prompt.replace("run command", "").strip()
+        extracted_param = [prompt.replace("run command", "").strip()]  
 
     elif function_name == "web_automation":
         extracted_website = None
@@ -44,8 +56,8 @@ def extract_parameters(prompt, function_name):
         if search_match:
             extracted_query = search_match.group(2).strip()
             extracted_website = search_match.group(4).strip()
-            return [extracted_website, extracted_query]
+            return [extracted_website, extracted_query]  
         
-        return [extracted_website] if extracted_website else ["google.com"]
+        return [extracted_website] if isinstance(extracted_website, str) else ["google.com"]
 
-    return [extracted_param] if extracted_param else ["unknown_param"]
+    return [extracted_param] if isinstance(extracted_param, str) else extracted_param if extracted_param else ["unknown_param"]
